@@ -1,0 +1,30 @@
+---
+import '~/styles/global.css';
+
+interface Props {
+  title?: string;
+}
+
+const { title = 'Álbum Mundial 2026' } = Astro.props;
+---
+
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1"
+    />
+    <meta name="theme-color" content="#1a1815" />
+    <meta
+      name="description"
+      content="Álbum de figurinhas do Mundial 2026 — marque o que você já tem e organize suas trocas."
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

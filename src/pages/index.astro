@@ -1,0 +1,12 @@
+---
+import Layout from '~/layouts/Layout.astro';
+import AlbumApp from '~/components/AlbumApp.tsx';
+---
+
+<Layout title="Álbum de figurinhas — Mundial 2026">
+  <div class="app-shell">
+    <div class="app-frame">
+      <AlbumApp client:only="react" />
+    </div>
+  </div>
+</Layout>
