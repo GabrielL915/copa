@@ -67,46 +67,87 @@ function saveState(s: State) {
 }
 
 type PressHandlers = (id: string) => {
-  onPointerDown: () => void;
+  onPointerDown: (e: React.PointerEvent) => void;
+  onPointerMove: (e: React.PointerEvent) => void;
   onPointerUp: () => void;
-  onPointerLeave: () => void;
   onPointerCancel: () => void;
+  onClick: (e: React.MouseEvent) => void;
   onContextMenu: (e: React.MouseEvent) => void;
 };
 
 // ── tap / long-press handler ──────────────────────────────────
+// Tap = browser `click` (only fires on a real tap, never on a scroll —
+// this is what makes it work reliably on mobile inside the scroll list).
+// Long-press = a timer armed on pointer-down, cancelled if the finger
+// moves (= a scroll). Press state lives in a ref so it survives the
+// re-render that onLong/onTap triggers (otherwise the click after a
+// long-press would also fire onTap).
+const MOVE_TOLERANCE = 10; // px before a press counts as a scroll
+const LONG_PRESS_MS = 450;
+
 function useStickerPress(
   onTap: (id: string) => void,
   onLong: (id: string) => void,
 ): PressHandlers {
+  const press = useRef({
+    id: '',
+    timer: 0 as ReturnType<typeof setTimeout> | 0,
+    longFired: false,
+    moved: false,
+    x: 0,
+    y: 0,
+  });
+
   return useCallback(
-    (id: string) => {
-      let timer: ReturnType<typeof setTimeout>;
-      let fired = false;
-      const down = () => {
-        fired = false;
-        timer = setTimeout(() => {
-          fired = true;
+    (id: string) => ({
+      onPointerDown: (e: React.PointerEvent) => {
+        const p = press.current;
+        p.id = id;
+        p.longFired = false;
+        p.moved = false;
+        p.x = e.clientX;
+        p.y = e.clientY;
+        clearTimeout(p.timer);
+        p.timer = setTimeout(() => {
+          p.longFired = true;
           onLong(id);
           if (navigator.vibrate) navigator.vibrate(20);
-        }, 450);
-      };
-      const cancel = () => clearTimeout(timer);
-      const up = () => {
-        clearTimeout(timer);
-        if (!fired) onTap(id);
-      };
-      return {
-        onPointerDown: down,
-        onPointerUp: up,
-        onPointerLeave: cancel,
-        onPointerCancel: cancel,
-        onContextMenu: (e: React.MouseEvent) => {
+        }, LONG_PRESS_MS);
+      },
+      onPointerMove: (e: React.PointerEvent) => {
+        const p = press.current;
+        if (p.id !== id) return;
+        if (
+          Math.abs(e.clientX - p.x) > MOVE_TOLERANCE ||
+          Math.abs(e.clientY - p.y) > MOVE_TOLERANCE
+        ) {
+          p.moved = true;
+          clearTimeout(p.timer);
+        }
+      },
+      onPointerUp: () => clearTimeout(press.current.timer),
+      onPointerCancel: () => {
+        const p = press.current;
+        clearTimeout(p.timer);
+        p.moved = true; // browser took over (scroll) — suppress the tap
+      },
+      onClick: (e: React.MouseEvent) => {
+        const p = press.current;
+        if (p.longFired || p.moved) {
           e.preventDefault();
+          return;
+        }
+        onTap(id);
+      },
+      onContextMenu: (e: React.MouseEvent) => {
+        e.preventDefault();
+        const p = press.current;
+        if (!p.longFired) {
+          p.longFired = true;
           onLong(id);
-        },
-      };
-    },
+        }
+      },
+    }),
     [onTap, onLong],
   );
 }
