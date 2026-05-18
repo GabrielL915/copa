@@ -20,7 +20,11 @@ import {
   getAllIds,
   type Team,
 } from '~/data/album';
-import { buildShareUrl, readShareFromHash } from '~/data/share';
+import {
+  buildShareUrl,
+  readShareFromHash,
+  decodeShareFromText,
+} from '~/data/share';
 
 const STORAGE_KEY = 'album-v1-anthropic';
 
@@ -485,13 +489,16 @@ function TradePanel({
   setState,
   showToast,
   share,
+  onImport,
 }: {
   missing: string[];
   dups: { id: string; n: number }[];
   setState: React.Dispatch<React.SetStateAction<State>>;
   showToast: (msg: string) => void;
   share: () => void;
+  onImport: (text: string) => boolean;
 }) {
+  const [importText, setImportText] = useState('');
   const reset = () => {
     if (confirm('Zerar todo o álbum?')) {
       setState({ collected: {} });
@@ -609,6 +616,69 @@ function TradePanel({
       />
       <div
         style={{
+          background: t.surface,
+          borderRadius: 10,
+          padding: 18,
+          margin: '0 16px 12px',
+          border: `1px solid ${t.line}`,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: t.sans,
+            fontSize: 13,
+            color: t.textDim,
+            textTransform: 'uppercase',
+            letterSpacing: 0.8,
+            marginBottom: 10,
+          }}
+        >
+          Importar de um link
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            placeholder="Cole o link compartilhado aqui"
+            style={{
+              flex: 1,
+              minWidth: 0,
+              boxSizing: 'border-box',
+              padding: '10px 12px',
+              background: t.surface2,
+              border: `1px solid ${t.line}`,
+              borderRadius: 8,
+              fontFamily: t.sans,
+              fontSize: 14,
+              color: t.text,
+              outline: 'none',
+            }}
+            onFocus={(e) => (e.target.style.borderColor = t.accent)}
+            onBlur={(e) => (e.target.style.borderColor = t.line)}
+          />
+          <button
+            onClick={() => {
+              if (onImport(importText)) setImportText('');
+            }}
+            style={{
+              background: t.accent,
+              border: 'none',
+              color: '#1a1815',
+              padding: '10px 16px',
+              borderRadius: 8,
+              fontFamily: t.sans,
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Importar
+          </button>
+        </div>
+      </div>
+      <div
+        style={{
           padding: '20px',
           display: 'flex',
           justifyContent: 'center',
@@ -683,34 +753,66 @@ export default function AlbumApp() {
     toastTimer.current = setTimeout(() => setToast(''), 1600);
   };
 
-  // Import a shared album passed in the URL hash (#a=…). Runs once on mount;
-  // confirms before overwriting, and always clears the hash so a reload
-  // doesn't re-prompt.
-  const importedRef = useRef(false);
-  useEffect(() => {
-    if (importedRef.current) return;
-    importedRef.current = true;
-    const incoming = readShareFromHash();
-    history.replaceState(
-      null,
-      '',
-      window.location.pathname + window.location.search,
-    );
-    if (!incoming) return;
+  // Apply an incoming shared album: confirm, persist immediately (so a
+  // reload is safe), then update state. Returns whether it was applied.
+  const applyImport = (incoming: Collected | null): boolean => {
+    if (!incoming || Object.keys(incoming).length === 0) {
+      showToast('Link inválido ou vazio');
+      return false;
+    }
     const n = Object.values(incoming).filter((v) => v > 0).length;
     if (
-      window.confirm(
+      !window.confirm(
         `Importar álbum compartilhado (${n} figurinhas)? ` +
           'Isso substitui o álbum atual neste aparelho.',
       )
-    ) {
-      setState({ collected: incoming });
-      showToast('Álbum importado');
-    }
+    )
+      return false;
+    const next: State = { collected: incoming };
+    saveState(next); // persist before setState — survives a reload/remount
+    setState(next);
+    showToast('Álbum importado');
+    return true;
+  };
+
+  // Import from the URL hash (#a=…): on mount *and* whenever the hash
+  // changes (pasting the link in the same tab only fires hashchange — it
+  // does not reload, so a mount-only effect would miss it). The hash is
+  // cleared after reading so a reload doesn't re-prompt.
+  useEffect(() => {
+    const handle = () => {
+      const incoming = readShareFromHash();
+      if (!incoming) return;
+      history.replaceState(
+        null,
+        '',
+        window.location.pathname + window.location.search,
+      );
+      applyImport(incoming);
+    };
+    handle();
+    window.addEventListener('hashchange', handle);
+    return () => window.removeEventListener('hashchange', handle);
+    // applyImport only touches stable setters; safe to bind once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const importFromText = (text: string) =>
+    applyImport(decodeShareFromText(text));
 
   const share = async () => {
     const url = buildShareUrl(state.collected);
+    // iOS Safari: the native share sheet is the reliable path (copying a
+    // ~660-char link out of a prompt gets truncated). Falls back to the
+    // clipboard, then to a prompt.
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Álbum Mundial 2026', url });
+        return;
+      } catch {
+        /* user cancelled or unsupported — fall through */
+      }
+    }
     try {
       await navigator.clipboard.writeText(url);
       showToast('Link copiado');
@@ -1024,6 +1126,7 @@ export default function AlbumApp() {
             setState={setState}
             showToast={showToast}
             share={share}
+            onImport={importFromText}
           />
         )}
       </div>

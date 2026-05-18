@@ -68,3 +68,12 @@ export function readShareFromHash(): Record<string, number> | null {
   const m = window.location.hash.match(/[#&]a=([^&]+)/);
   return m ? decodeShare(m[1]) : null;
 }
+
+/** Decodes a pasted full URL *or* a bare payload (manual-import fallback). */
+export function decodeShareFromText(
+  text: string,
+): Record<string, number> | null {
+  const trimmed = text.trim();
+  const m = trimmed.match(/[#&]a=([^&\s]+)/);
+  return decodeShare(m ? m[1] : trimmed);
+}
