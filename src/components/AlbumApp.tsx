@@ -20,6 +20,7 @@ import {
   getAllIds,
   type Team,
 } from '~/data/album';
+import { buildShareUrl, readShareFromHash } from '~/data/share';
 
 const STORAGE_KEY = 'album-v1-anthropic';
 
@@ -483,11 +484,13 @@ function TradePanel({
   dups,
   setState,
   showToast,
+  share,
 }: {
   missing: string[];
   dups: { id: string; n: number }[];
   setState: React.Dispatch<React.SetStateAction<State>>;
   showToast: (msg: string) => void;
+  share: () => void;
 }) {
   const reset = () => {
     if (confirm('Zerar todo o álbum?')) {
@@ -604,7 +607,36 @@ function TradePanel({
         items={dups.map((d) => `${d.id} ×${d.n}`)}
         empty="Nenhuma repetida ainda."
       />
-      <div style={{ padding: '20px', display: 'flex', justifyContent: 'center' }}>
+      <div
+        style={{
+          padding: '20px',
+          display: 'flex',
+          justifyContent: 'center',
+          gap: 12,
+        }}
+      >
+        <button
+          onClick={share}
+          style={{
+            background: 'transparent',
+            border: `1px solid ${t.accentDim}`,
+            color: t.accent,
+            padding: '10px 16px',
+            borderRadius: 8,
+            fontFamily: t.sans,
+            fontSize: 13,
+            cursor: 'pointer',
+            transition: 'all .2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = t.accent;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = t.accentDim;
+          }}
+        >
+          Compartilhar / sincronizar
+        </button>
         <button
           onClick={reset}
           style={{
@@ -649,6 +681,42 @@ export default function AlbumApp() {
     setToast(msg);
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(''), 1600);
+  };
+
+  // Import a shared album passed in the URL hash (#a=…). Runs once on mount;
+  // confirms before overwriting, and always clears the hash so a reload
+  // doesn't re-prompt.
+  const importedRef = useRef(false);
+  useEffect(() => {
+    if (importedRef.current) return;
+    importedRef.current = true;
+    const incoming = readShareFromHash();
+    history.replaceState(
+      null,
+      '',
+      window.location.pathname + window.location.search,
+    );
+    if (!incoming) return;
+    const n = Object.values(incoming).filter((v) => v > 0).length;
+    if (
+      window.confirm(
+        `Importar álbum compartilhado (${n} figurinhas)? ` +
+          'Isso substitui o álbum atual neste aparelho.',
+      )
+    ) {
+      setState({ collected: incoming });
+      showToast('Álbum importado');
+    }
+  }, []);
+
+  const share = async () => {
+    const url = buildShareUrl(state.collected);
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('Link copiado');
+    } catch {
+      window.prompt('Copie o link do álbum:', url);
+    }
   };
 
   const onTap = (id: string) =>
@@ -955,6 +1023,7 @@ export default function AlbumApp() {
             dups={dups}
             setState={setState}
             showToast={showToast}
+            share={share}
           />
         )}
       </div>
