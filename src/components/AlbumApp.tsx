@@ -490,6 +490,7 @@ function TradePanel({
   showToast,
   share,
   onImport,
+  onPrint,
 }: {
   missing: string[];
   dups: { id: string; n: number }[];
@@ -497,6 +498,7 @@ function TradePanel({
   showToast: (msg: string) => void;
   share: () => void;
   onImport: (text: string) => boolean;
+  onPrint: () => void;
 }) {
   const [importText, setImportText] = useState('');
   const reset = () => {
@@ -681,6 +683,7 @@ function TradePanel({
         style={{
           padding: '20px',
           display: 'flex',
+          flexWrap: 'wrap',
           justifyContent: 'center',
           gap: 12,
         }}
@@ -708,6 +711,30 @@ function TradePanel({
           Compartilhar / sincronizar
         </button>
         <button
+          onClick={onPrint}
+          style={{
+            background: 'transparent',
+            border: `1px solid ${t.line}`,
+            color: t.textDim,
+            padding: '10px 16px',
+            borderRadius: 8,
+            fontFamily: t.sans,
+            fontSize: 13,
+            cursor: 'pointer',
+            transition: 'all .2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = t.accent;
+            e.currentTarget.style.color = t.accent;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = t.line;
+            e.currentTarget.style.color = t.textDim;
+          }}
+        >
+          Imprimir / PDF
+        </button>
+        <button
           onClick={reset}
           style={{
             background: 'transparent',
@@ -731,6 +758,151 @@ function TradePanel({
         >
           Zerar álbum
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ── printable sheet (PDF) ─────────────────────────────────────
+// Hidden on screen (.print-sheet in global.css); only visible when
+// printing. Black-on-white, very compact: all 994 stickers, the ones
+// you own filled in, aiming to fit one A4 sheet front+back.
+function PrintCell({ id, label, n }: { id: string; label: React.ReactNode; n: number }) {
+  const on = n > 0;
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '14px',
+        height: '14px',
+        margin: '0.5px',
+        fontSize: '6.5px',
+        lineHeight: 1,
+        fontFamily: 'monospace',
+        border: `0.5pt solid ${on ? '#000' : '#bbb'}`,
+        background: on ? '#000' : '#fff',
+        color: on ? '#fff' : '#bbb',
+        position: 'relative',
+      }}
+    >
+      {label}
+      {n > 1 && (
+        <sup style={{ fontSize: '5px', marginLeft: '0.5px' }}>{n}</sup>
+      )}
+    </span>
+  );
+}
+
+function PrintBlock({
+  title,
+  ids,
+  labels,
+  collected,
+}: {
+  title: string;
+  ids: string[];
+  labels: (i: number) => React.ReactNode;
+  collected: Collected;
+}) {
+  return (
+    <div
+      style={{
+        breakInside: 'avoid',
+        display: 'inline-block',
+        width: '100%',
+        marginBottom: '5px',
+      }}
+    >
+      <div
+        style={{
+          fontSize: '7px',
+          fontWeight: 700,
+          fontFamily: 'sans-serif',
+          marginBottom: '1px',
+        }}
+      >
+        {title}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+        {ids.map((id, i) => (
+          <PrintCell key={id} id={id} label={labels(i)} n={collected[id] || 0} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PrintSheet({ collected }: { collected: Collected }) {
+  const owned = Object.values(collected).filter((n) => n > 0).length;
+  return (
+    <div
+      className="print-sheet"
+      style={{
+        background: '#fff',
+        color: '#000',
+        fontFamily: 'sans-serif',
+        padding: '6mm',
+        boxSizing: 'border-box',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          borderBottom: '1pt solid #000',
+          paddingBottom: '3px',
+          marginBottom: '6px',
+        }}
+      >
+        <strong style={{ fontSize: '11px' }}>
+          Álbum Mundial 2026 — checklist
+        </strong>
+        <span style={{ fontSize: '8px' }}>
+          {owned}/{TOTAL} · ■ = tenho · □ = falta
+        </span>
+      </div>
+      <div
+        style={{
+          columnCount: 3,
+          columnGap: '5mm',
+          columnFill: 'auto',
+        }}
+      >
+        <PrintBlock
+          title="Capa"
+          ids={['00']}
+          labels={() => '00'}
+          collected={collected}
+        />
+        <PrintBlock
+          title={`FWC 1–${FWC_COUNT}`}
+          ids={Array.from({ length: FWC_COUNT }, (_, i) => `FWC ${i + 1}`)}
+          labels={(i) => i + 1}
+          collected={collected}
+        />
+        {Object.entries(GROUPS).flatMap(([letter, teams]) =>
+          teams.map((team) => (
+            <PrintBlock
+              key={team.c}
+              title={`${letter} · ${team.c} ${team.n}`}
+              ids={Array.from(
+                { length: PER_TEAM },
+                (_, i) => `${team.c} ${i + 1}`,
+              )}
+              labels={(i) => i + 1}
+              collected={collected}
+            />
+          )),
+        )}
+        <PrintBlock
+          title={`CC 1–${CC_COUNT}`}
+          ids={Array.from({ length: CC_COUNT }, (_, i) => `CC ${i + 1}`)}
+          labels={(i) => i + 1}
+          collected={collected}
+        />
       </div>
     </div>
   );
@@ -1127,6 +1299,7 @@ export default function AlbumApp() {
             showToast={showToast}
             share={share}
             onImport={importFromText}
+            onPrint={() => window.print()}
           />
         )}
       </div>
@@ -1153,6 +1326,8 @@ export default function AlbumApp() {
       >
         {toast}
       </div>
+
+      <PrintSheet collected={state.collected} />
     </div>
   );
 }

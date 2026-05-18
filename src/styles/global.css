@@ -48,3 +48,41 @@ body {
     box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04);
   }
 }
+
+/* Printable checklist — hidden on screen, only shown when printing. */
+.print-sheet {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 6mm;
+  }
+  :root {
+    color-scheme: light;
+  }
+  html,
+  body {
+    height: auto !important;
+    background: #fff !important;
+  }
+  /* keep the app in the layout (so React stays mounted) but invisible */
+  body * {
+    visibility: hidden;
+  }
+  .print-sheet,
+  .print-sheet * {
+    visibility: visible;
+  }
+  .print-sheet {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    /* keep the inked cells black even with "no background graphics" off */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
